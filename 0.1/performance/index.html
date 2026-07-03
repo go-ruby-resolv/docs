@@ -395,6 +395,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#scope-pure-compute-no-network" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scope: pure compute, no network
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-is-measured" class="md-nav__link">
     <span class="md-ellipsis">
       What is measured
@@ -404,9 +413,27 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#method" class="md-nav__link">
+  <a href="#results-nsop-best-of-25" class="md-nav__link">
     <span class="md-ellipsis">
-      Method
+      Results (ns/op, best of 25)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-go-vs-yjit-verdict-per-op" class="md-nav__link">
+    <span class="md-ellipsis">
+      The go-vs-YJIT verdict, per op
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      Caveats
     </span>
   </a>
   
@@ -467,6 +494,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#scope-pure-compute-no-network" class="md-nav__link">
+    <span class="md-ellipsis">
+      Scope: pure compute, no network
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-is-measured" class="md-nav__link">
     <span class="md-ellipsis">
       What is measured
@@ -476,9 +512,27 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#method" class="md-nav__link">
+  <a href="#results-nsop-best-of-25" class="md-nav__link">
     <span class="md-ellipsis">
-      Method
+      Results (ns/op, best of 25)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-go-vs-yjit-verdict-per-op" class="md-nav__link">
+    <span class="md-ellipsis">
+      The go-vs-YJIT verdict, per op
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      Caveats
     </span>
   </a>
   
@@ -500,40 +554,221 @@
 
 
 <h1 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h1>
-<p><code>go-ruby-resolv/resolv</code> is the pure-Go library that
-<a href="https://github.com/go-embedded-ruby/ruby"><code>rbgo</code></a> binds for Ruby's <code>resolv</code>. This
-page records the <strong>methodology</strong> of the ecosystem-wide per-module parity suite —
-how this module is benchmarked against the reference Ruby runtimes — without
-quoting numbers here, so the figures never drift out of date.</p>
+<p><code>go-ruby-resolv/resolv</code> is the pure-Go, CGO-free library that
+<a href="https://github.com/go-embedded-ruby/ruby"><code>rbgo</code></a> binds for Ruby's <code>resolv</code>.
+This page records a <strong>real, library-level</strong> benchmark of that module's Go API
+against every reference runtime's own stdlib <code>resolv</code>, one row per offline
+<code>resolv</code> primitive. It is part of the ecosystem-wide per-module parity suite, and
+<strong>the bar is beating MRI + YJIT</strong>, not just plain MRI.</p>
+<h2 id="scope-pure-compute-no-network">Scope: pure compute, no network<a class="headerlink" href="#scope-pure-compute-no-network" title="Permanent link">&para;</a></h2>
+<p><code>rbgo</code>'s <code>resolv</code> binding is <strong>compute primitives only — the sockets stay
+stubbed</strong>. So this benchmark deliberately measures only the deterministic,
+<strong>offline</strong> parts of <code>resolv</code> that need no DNS server, no socket, and no live
+query: DNS <strong>name</strong> parse/encode, <strong>IPv4/IPv6</strong> address parse and render, and DNS
+<strong>message</strong> pack/unpack over a fixed byte buffer. Nothing here touches the
+network, which is exactly what makes every number reproducible. Live resolution
+(<code>getaddress</code>, UDP/TCP round-trips) is out of scope by construction.</p>
 <h2 id="what-is-measured">What is measured<a class="headerlink" href="#what-is-measured" title="Permanent link">&para;</a></h2>
-<p>The <strong>same</strong> Ruby script — a DNS encode/decode + address-parse workload (<code>Resolv::DNS::Message#encode</code> / <code>.decode</code>, <code>Resolv::IPv4</code> / <code>IPv6.create</code>, <code>Resolv::Hosts</code>) — is run under every runtime.
-<code>rbgo</code>'s number reflects <strong>this pure-Go library doing the work</strong>; every other
-column is that interpreter's own <code>resolv</code> (or equivalent) implementation. So the
-comparison is the <strong>Ruby-visible operation</strong>, apples-to-apples across
-interpreters. The script prints a deterministic checksum and its output is
-checked <strong>byte-identical to MRI</strong> before timing.</p>
-<h2 id="method">Method<a class="headerlink" href="#method" title="Permanent link">&para;</a></h2>
+<p>Eight representative offline operations run over one <strong>fixed, deterministic
+corpus</strong> (16 DNS names, 16 IPv4 addresses, 12 IPv6 addresses, and one
+representative DNS response message with records spread across the answer,
+authority and additional sections):</p>
+<table>
+<thead>
+<tr>
+<th>Op</th>
+<th>What it exercises</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name-parse</code></td>
+<td><code>Resolv::DNS::Name.create</code> over all 16 names (label splitting, absolute flag)</td>
+</tr>
+<tr>
+<td><code>name-to_s</code></td>
+<td><code>Resolv::DNS::Name#to_s</code> rendering of the pre-parsed names</td>
+</tr>
+<tr>
+<td><code>ipv4-parse</code></td>
+<td><code>Resolv::IPv4.create</code> over all 16 dotted-quads (anchored octet regex)</td>
+</tr>
+<tr>
+<td><code>ipv4-to_s</code></td>
+<td><code>Resolv::IPv4#to_s</code> rendering of the pre-parsed addresses</td>
+</tr>
+<tr>
+<td><code>ipv6-parse</code></td>
+<td><code>Resolv::IPv6.create</code> over all 12 textual forms (8-hex, <code>::</code>, embedded-IPv4)</td>
+</tr>
+<tr>
+<td><code>ipv6-to_s</code></td>
+<td><code>Resolv::IPv6#to_s</code> rendering, including first-run zero compression</td>
+</tr>
+<tr>
+<td><code>message-encode</code></td>
+<td><code>Resolv::DNS::Message#encode</code>: pack the whole message to wire, with 0xC0 name compression</td>
+</tr>
+<tr>
+<td><code>message-decode</code></td>
+<td><code>Resolv::DNS::Message.decode</code>: unpack the fixed wire buffer back into typed records</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>go-ruby</strong> column drives this pure-Go library through its Go API; every
+other column is that interpreter's own stdlib <code>resolv</code>. The Go and Ruby drivers
+build the <strong>identical</strong> corpus and, before any timing, each op's integer
+checksum is verified <strong>identical across all four runtimes and the Go driver</strong>
+(e.g. <code>name-parse</code>=72 labels, <code>ipv6-parse</code>=5856, <code>message-decode</code>=714751). The
+<code>message-encode</code> checksum is the <strong>byte sum of the encoded wire</strong> (22432), so it
+only matches if every RDATA encoder and every name-compression pointer agrees —
+making it a strong wire-format equality proof. So the comparison is the same
+observable operation, apples-to-apples.</p>
 <ul>
-<li><strong>Best-of-N wall time</strong> (best, not mean, to suppress scheduler noise);
-  single-shot processes, no warm-up beyond the script's own loop.</li>
-<li><strong>Runtimes:</strong> MRI (the oracle) and MRI + YJIT; JRuby (OpenJDK); TruffleRuby
-  (GraalVM CE Native). JRuby and TruffleRuby are timed <strong>cold, single-shot</strong>, so
-  they carry JVM / Graal startup on every run — read them as one-shot
-  <code>ruby file.rb</code> costs, the same way <code>rbgo</code> and MRI are measured, not as
-  steady-state JIT numbers.</li>
-<li>The benchmark script and harness live in rbgo's repo under
-  <a href="https://github.com/go-embedded-ruby/ruby/tree/main/bench/modules"><code>bench/modules/</code></a>
-  (<code>resolv.rb</code> + <code>run.sh</code>). Reproduce:
-  <code>RBGO=./rbgo TRUFFLE=truffleruby bash bench/modules/run.sh 5</code>.</li>
+<li><strong>Host:</strong> Apple M4 Max, macOS (<code>arm64-darwin</code>). <strong>Date:</strong> 2026-07-03.</li>
+<li><strong>Runtimes:</strong> Go 1.26.4; <code>ruby 4.0.5 +PRISM</code> (MRI, the oracle) and
+  <code>ruby --yjit</code>; <code>jruby 10.1.0.0</code> (OpenJDK 25); <code>truffleruby 34.0.1</code>
+  (GraalVM CE Native).</li>
+<li><strong>Method:</strong> each process runs 3 untimed warm-up passes then 25 timed passes of
+  a fixed inner loop, timed with a monotonic clock; the <strong>best</strong> pass is reported
+  as <strong>ns/op</strong>. Interpreter start-up is outside the timed region, so the number
+  is the operation's own cost, not <code>ruby file.rb</code> process cost. Numbers were
+  stable to within a few percent across repeated runs; treat the small
+  sub-microsecond gaps as approximate.</li>
+<li>Harness and drivers live in this repo under
+  <a href="https://github.com/go-ruby-resolv/docs/tree/main/benchmarks"><code>benchmarks/</code></a>
+  (<code>go/</code>, <code>ruby/resolv.rb</code>, <code>run.sh</code>). Reproduce: <code>bash benchmarks/run.sh</code>.</li>
 </ul>
-<div class="admonition note">
-<p class="admonition-title">Honest framing</p>
-<p>No headline numbers are reproduced on this page on purpose: the parity suite
-is the source of truth and is re-run per release. Rows that complete in well
-under a couple hundred milliseconds carry the most relative noise; treat
-their ratios as order-of-magnitude. The published figures are real measured
-numbers — nothing is cherry-picked.</p>
-</div>
+<h2 id="results-nsop-best-of-25">Results (ns/op, best of 25)<a class="headerlink" href="#results-nsop-best-of-25" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Op</th>
+<th style="text-align: right;">go-ruby (pure Go)</th>
+<th style="text-align: right;">MRI</th>
+<th style="text-align: right;">MRI + YJIT</th>
+<th style="text-align: right;">JRuby</th>
+<th style="text-align: right;">TruffleRuby</th>
+<th style="text-align: right;"><strong>go vs YJIT</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>message-decode</code></td>
+<td style="text-align: right;"><strong>2 477</strong></td>
+<td style="text-align: right;">75 950</td>
+<td style="text-align: right;">50 350</td>
+<td style="text-align: right;">60 024</td>
+<td style="text-align: right;">826 876</td>
+<td style="text-align: right;"><strong>20.3× faster</strong> ✅</td>
+</tr>
+<tr>
+<td><code>name-parse</code></td>
+<td style="text-align: right;"><strong>1 494</strong></td>
+<td style="text-align: right;">33 910</td>
+<td style="text-align: right;">27 190</td>
+<td style="text-align: right;">22 644</td>
+<td style="text-align: right;">32 880</td>
+<td style="text-align: right;"><strong>18.2× faster</strong> ✅</td>
+</tr>
+<tr>
+<td><code>message-encode</code></td>
+<td style="text-align: right;"><strong>2 934</strong></td>
+<td style="text-align: right;">62 210</td>
+<td style="text-align: right;">50 840</td>
+<td style="text-align: right;">50 940</td>
+<td style="text-align: right;">67 757</td>
+<td style="text-align: right;"><strong>17.3× faster</strong> ✅</td>
+</tr>
+<tr>
+<td><code>name-to_s</code></td>
+<td style="text-align: right;"><strong>800</strong></td>
+<td style="text-align: right;">8 080</td>
+<td style="text-align: right;">7 380</td>
+<td style="text-align: right;">9 520</td>
+<td style="text-align: right;">10 642</td>
+<td style="text-align: right;"><strong>9.2× faster</strong> ✅</td>
+</tr>
+<tr>
+<td><code>ipv4-parse</code></td>
+<td style="text-align: right;"><strong>2 940</strong></td>
+<td style="text-align: right;">12 710</td>
+<td style="text-align: right;">10 360</td>
+<td style="text-align: right;">12 238</td>
+<td style="text-align: right;">34 561</td>
+<td style="text-align: right;"><strong>3.5× faster</strong> ✅</td>
+</tr>
+<tr>
+<td><code>ipv6-parse</code></td>
+<td style="text-align: right;"><strong>9 205</strong></td>
+<td style="text-align: right;">27 960</td>
+<td style="text-align: right;">25 440</td>
+<td style="text-align: right;">61 083</td>
+<td style="text-align: right;">48 953</td>
+<td style="text-align: right;"><strong>2.8× faster</strong> ✅</td>
+</tr>
+<tr>
+<td><code>ipv4-to_s</code></td>
+<td style="text-align: right;"><strong>1 390</strong></td>
+<td style="text-align: right;">4 300</td>
+<td style="text-align: right;">3 770</td>
+<td style="text-align: right;">9 131</td>
+<td style="text-align: right;">8 146</td>
+<td style="text-align: right;"><strong>2.7× faster</strong> ✅</td>
+</tr>
+<tr>
+<td><code>ipv6-to_s</code></td>
+<td style="text-align: right;"><strong>4 906</strong></td>
+<td style="text-align: right;">11 300</td>
+<td style="text-align: right;">10 780</td>
+<td style="text-align: right;">36 555</td>
+<td style="text-align: right;">26 280</td>
+<td style="text-align: right;"><strong>2.2× faster</strong> ✅</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-go-vs-yjit-verdict-per-op">The go-vs-YJIT verdict, per op<a class="headerlink" href="#the-go-vs-yjit-verdict-per-op" title="Permanent link">&para;</a></h2>
+<p><strong>The pure-Go library beats MRI + YJIT on every one of the eight offline
+operations</strong> — there is no op where YJIT wins. The margins split into two bands:</p>
+<p><strong>Structural pack/parse — 17×–20× faster than YJIT:</strong></p>
+<ul>
+<li><strong><code>message-decode</code> — 20.3× faster</strong> (2 477 ns vs 50 350 ns).</li>
+<li><strong><code>name-parse</code> — 18.2× faster</strong> (1 494 ns vs 27 190 ns).</li>
+<li><strong><code>message-encode</code> — 17.3× faster</strong> (2 934 ns vs 50 840 ns).</li>
+</ul>
+<p>These are the object-heavy operations. In MRI they allocate a tree of <code>Name</code>,
+<code>Label</code> and <code>Resource</code> objects and thread them through the encoder/decoder with
+per-byte method dispatch; YJIT removes some interpreter overhead but not the
+allocation and object-model cost. The Go port does the same work over slices and
+structs with no interpreter in the loop, so it pulls far ahead — and this is the
+exact shape of the payload <code>rbgo</code> binds.</p>
+<p><strong>Regex-bounded address work — 2.2×–3.5× faster than YJIT:</strong></p>
+<ul>
+<li><strong><code>ipv4-parse</code> — 3.5× faster</strong>, <strong><code>ipv6-parse</code> — 2.8× faster</strong>.</li>
+<li><strong><code>ipv4-to_s</code> — 2.7× faster</strong>, <strong><code>ipv6-to_s</code> — 2.2× faster</strong>.</li>
+</ul>
+<p>Address parsing is dominated by the anchored <code>Regex256</code> / IPv6 alternation match
+that both implementations run; the Go side delegates to the sibling pure-Go
+Onigmo engine (<a href="https://github.com/go-ruby-regexp/regexp"><code>go-ruby-regexp</code></a>),
+which is why the margin here is narrower than for the allocation-bound ops rather
+than another order of magnitude. Rendering (<code>to_s</code>) is a small formatting loop
+and tracks the same band. Closing the remaining regexp gap further is tracked in
+<code>go-ruby-regexp</code> and is the top lever for the address ops; even so, the pure-Go
+primitive already beats every interpreter, YJIT included, on all four.</p>
+<h2 id="caveats">Caveats<a class="headerlink" href="#caveats" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Cold-JIT framing.</strong> JRuby and TruffleRuby are timed after the same 3 warm-up
+  passes as everyone else, but 3 passes do <strong>not</strong> bring the JVM/GraalVM JITs to
+  full steady state; read their columns as lightly-warmed, not as peak
+  throughput. TruffleRuby's <code>message-decode</code> in particular is still deep in its
+  warm-up here. MRI, YJIT and Go reach their representative speed almost
+  immediately, so their columns are the load-bearing comparison.</li>
+<li><strong>Offline scope.</strong> These are <code>resolv</code>'s compute primitives only; live DNS
+  resolution is not measured (and is stubbed in the <code>rbgo</code> binding), so this page
+  makes no claim about network resolution performance.</li>
+<li>No number here is fabricated: all figures are measured on the host and date
+  named above and reproduce with <code>bash benchmarks/run.sh</code>.</li>
+</ul>
 
 
 
