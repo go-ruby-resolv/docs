@@ -2,3 +2,5 @@ github.com/go-ruby-resolv/resolv v0.0.0-20260629153520-df410a5796ac h1:Y++tdsBF6
 github.com/go-ruby-resolv/resolv v0.0.0-20260629153520-df410a5796ac/go.mod h1:RD3wPeMjMThQ7QVnB9O15gCllRg+RJhSEJu9DtFaLLQ=
 github.com/go-ruby-resolv/resolv v0.0.0-20260717073312-9fce615a7c36 h1:zY5BG7oDm17uAeOtujn/1/UEGXlav0cjXbZy8cQmZ0k=
 github.com/go-ruby-resolv/resolv v0.0.0-20260717073312-9fce615a7c36/go.mod h1:RD3wPeMjMThQ7QVnB9O15gCllRg+RJhSEJu9DtFaLLQ=
+github.com/go-ruby-resolv/resolv v0.0.0-20260916101809-a2b1b027ae6d h1:yU7BQTgui2DiLBkp4mB6QnIjIepY7K9S2hLiiaNLpAM=
+github.com/go-ruby-resolv/resolv v0.0.0-20260916101809-a2b1b027ae6d/go.mod h1:RD3wPeMjMThQ7QVnB9O15gCllRg+RJhSEJu9DtFaLLQ=
